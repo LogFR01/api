@@ -58,9 +58,10 @@ def activate_key():
 @app.route('/check/<key>', methods=['GET'])
 def check_key(key):
     """Check if a key is valid and active"""
+    hashed_key = hashlib.sha256(key.encode()).hexdigest()  # Hache la clé ici
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT is_active FROM activation_keys WHERE key = ?", (key,))
+        cursor.execute("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,))
         row = cursor.fetchone()
 
         if row is None:
