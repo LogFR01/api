@@ -41,9 +41,11 @@ def activate_key():
     if not key:
         return jsonify({"error": "Missing key"}), 400
 
+    hashed_key = hashlib.sha256(key.encode()).hexdigest()  # Hachage de la clé
+
     with sqlite3.connect(DB_PATH) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT is_active FROM activation_keys WHERE key = ?", (key,))
+        cursor.execute("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,))
         row = cursor.fetchone()
 
         if row is None:
@@ -51,7 +53,7 @@ def activate_key():
         elif row[0] == 1:
             return jsonify({"error": "Key already activated"}), 400
         else:
-            cursor.execute("UPDATE activation_keys SET is_active = 1 WHERE key = ?", (key,))
+            cursor.execute("UPDATE activation_keys SET is_active = 1 WHERE key = ?", (hashed_key,))
             conn.commit()
             return jsonify({"message": "Key activated successfully!"}), 200
 
