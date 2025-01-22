@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 import sqlite3
 import hashlib
 import os
@@ -22,6 +22,16 @@ def init_db():
 init_db()
 
 # API Routes
+@app.route('/', methods=['GET'])
+def home():
+    """Home route"""
+    return jsonify({"message": "Welcome to the Activation Key API!"}), 200
+
+@app.route('/favicon.ico')
+def favicon():
+    """Handle favicon requests"""
+    return '', 204
+
 @app.route('/activate', methods=['POST'])
 def activate_key():
     """Activate a key"""
