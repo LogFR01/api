@@ -91,7 +91,7 @@ def deactivate_key():
 
 @app.route("/check/<key>", methods=["GET"])
 def check_key(key):
-    """Vérifier le statut d'une clé"""
+    """Vérifier le statut d une clé"""
     hashed_key = hash_key(key)
     row = query_db("SELECT is_active, expiration_date FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
 
