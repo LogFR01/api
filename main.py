@@ -20,6 +20,18 @@ def init_db():
                 expiration_date DATETIME
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS admins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT NOT NULL UNIQUE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS blacklisted_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ip TEXT NOT NULL UNIQUE
+            )
+        """)
     print("Database initialized!")
 
 init_db()
@@ -34,6 +46,18 @@ def query_db(query, args=(), one=False):
         result = cursor.fetchall()
         conn.commit()
         return (result[0] if result else None) if one else result
+
+# Vérification des permissions administratives
+def is_admin(ip):
+    admin = query_db("SELECT 1 FROM admins WHERE ip = ?", (ip,), one=True)
+    return admin is not None
+
+@app.before_request
+def check_blacklist():
+    ip = request.remote_addr
+    blacklisted = query_db("SELECT 1 FROM blacklisted_users WHERE ip = ?", (ip,), one=True)
+    if blacklisted:
+        return jsonify({"error": "Your IP is blacklisted."}), 403
 
 # Routes API
 @app.route("/", methods=["GET"])
@@ -53,8 +77,7 @@ def get_all_keys():
 
 @app.route("/create", methods=["POST"])
 def create_key():
-    admin_token = os.getenv("ADMIN_TOKEN", "secret")
-    if request.headers.get("Authorization") != f"Bearer {admin_token}":
+    if not is_admin(request.remote_addr):
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json
@@ -153,6 +176,26 @@ def check_key(key):
         "is_active": bool(is_active),
         "expires_at": expiration_date.isoformat() if expiration_date else None
     }), 200
+
+@app.route("/delkey", methods=["DELETE"])
+def delete_key():
+    if not is_admin(request.remote_addr):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    key = data.get("key")
+
+    if not key:
+        return jsonify({"error": "Missing key"}), 400
+
+    hashed_key = hash_key(key)
+    row = query_db("SELECT id FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
+
+    if not row:
+        return jsonify({"error": "Invalid key"}), 404
+
+    query_db("DELETE FROM activation_keys WHERE key = ?", (hashed_key,))
+    return jsonify({"message": "Key deleted successfully!"}), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
