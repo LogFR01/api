@@ -66,6 +66,9 @@ def home():
 
 @app.route("/allkeys", methods=["GET"])
 def get_all_keys():
+    if not is_admin(request.remote_addr):
+        return jsonify({"error": "Unauthorized"}), 403
+
     keys = query_db("SELECT id, key, is_active, activation_date, expiration_date FROM activation_keys")
     return jsonify([{
         "id": row[0],
@@ -196,6 +199,35 @@ def delete_key():
 
     query_db("DELETE FROM activation_keys WHERE key = ?", (hashed_key,))
     return jsonify({"message": "Key deleted successfully!"}), 200
+
+
+
+
+@app.route("/setadmin", methods=["POST"])
+def set_admin():
+    if not is_admin(request.remote_addr):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    ip = data.get("ip")
+    if not ip:
+        return jsonify({"error": "Missing IP address"}), 400
+
+    try:
+        query_db("INSERT INTO admins (ip) VALUES (?)", (ip,))
+        return jsonify({"message": f"IP {ip} added as admin successfully!"}), 201
+    except sqlite3.IntegrityError:
+        return jsonify({"error": "IP address is already an admin"}), 400
+
+@app.route("/alladmin", methods=["GET"])
+def get_all_admins():
+    if not is_admin(request.remote_addr):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    admins = query_db("SELECT id, ip FROM admins")
+    return jsonify([{"id": row[0], "ip": row[1]} for row in admins]), 200
+
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
