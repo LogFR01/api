@@ -120,12 +120,18 @@ def deactivate_key():
         return jsonify({"error": "Invalid key"}), 404
     elif row[0] == 0:
         return jsonify({"error": "Key is already inactive"}), 400
-        
+
+    # Désactivation de la clé
     query_db("""
         UPDATE activation_keys
         SET is_active = 0, activation_date = NULL, expiration_date = NULL
         WHERE key = ?
     """, (hashed_key,))
+
+    # Ajoutons un log pour confirmer que la clé est bien désactivée
+    row = query_db("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
+    if row[0] == 0:
+        print(f"Clé {key} a été désactivée avec succès dans la base de données.")
 
     return jsonify({"message": "Key deactivated successfully!"}), 200
 
