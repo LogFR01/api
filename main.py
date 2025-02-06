@@ -8,7 +8,6 @@ app = Flask(__name__)
 
 DB_PATH = "keys.db"
 
-# Initialisation de la base de données
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -16,7 +15,7 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 key TEXT NOT NULL UNIQUE,
                 is_active INTEGER DEFAULT 0,
-                is_created INTEGER DEFAULT 1,  # Nouveau champ pour marquer si la clé a été créée
+                is_created INTEGER DEFAULT 1,  -- Nouveau champ pour marquer si la clé a été créée
                 activation_date DATETIME,
                 expiration_date DATETIME
             )
