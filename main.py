@@ -138,10 +138,13 @@ def check_key(key):
         return jsonify({"error": "Invalid key"}), 404
 
     is_active, expiration_date = row
-    if is_active and expiration_date:
+    
+    if not is_active:
+        return jsonify({"error": "Key is deactivated"}), 403
+
+    if expiration_date:
         expiration_date = datetime.fromisoformat(expiration_date)
         if datetime.utcnow() > expiration_date:
-            # Expire la clé si elle est hors délai
             query_db("""
                 UPDATE activation_keys
                 SET is_active = 0, activation_date = NULL, expiration_date = NULL
