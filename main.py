@@ -65,6 +65,11 @@ def create_key():
     hashed_key = hash_key(key)
     try:
         query_db("INSERT INTO activation_keys (key, is_active) VALUES (?, 0)", (hashed_key,))
+        
+        # Ajouter un log pour vérifier l'état de la clé après création
+        row = query_db("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
+        print(f"Clé {key} créée avec is_active = {row[0]}")  # Log de l'état de la clé
+        
         return jsonify({"message": "Key created successfully!"}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Key already exists"}), 400
@@ -146,7 +151,10 @@ def check_key(key):
 
     is_active, expiration_date = row
     
-    # Vérification stricte : si la clé est désactivée, on l'empêche d'être utilisée
+    # Log pour vérifier si la clé est active ou inactive
+    print(f"Clé {key} - is_active: {is_active}, expiration_date: {expiration_date}")
+
+    # La clé ne peut pas être utilisée si elle n'est pas activée
     if not is_active:
         return jsonify({"error": "Key is deactivated"}), 403
 
@@ -164,6 +172,7 @@ def check_key(key):
         "is_active": bool(is_active),
         "expires_at": expiration_date.isoformat() if expiration_date else None
     }), 200
+
     
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
