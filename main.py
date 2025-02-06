@@ -64,10 +64,11 @@ def create_key():
 
     hashed_key = hash_key(key)
     try:
-        query_db("INSERT INTO activation_keys (key) VALUES (?)", (hashed_key,))
+        query_db("INSERT INTO activation_keys (key, is_active) VALUES (?, 0)", (hashed_key,))
         return jsonify({"message": "Key created successfully!"}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Key already exists"}), 400
+
 
 @app.route("/activate", methods=["POST"])
 def activate_key():
