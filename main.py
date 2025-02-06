@@ -8,6 +8,7 @@ app = Flask(__name__)
 
 DB_PATH = "keys.db"
 
+# Initialisation de la base de données
 def init_db():
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
@@ -15,7 +16,6 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 key TEXT NOT NULL UNIQUE,
                 is_active INTEGER DEFAULT 0,
-                is_created INTEGER DEFAULT 1,  -- Nouveau champ pour marquer si la clé a été créée
                 activation_date DATETIME,
                 expiration_date DATETIME
             )
@@ -42,14 +42,13 @@ def home():
 
 @app.route("/allkeys", methods=["GET"])
 def get_all_keys():
-    keys = query_db("SELECT id, key, is_active, is_created, activation_date, expiration_date FROM activation_keys")
+    keys = query_db("SELECT id, key, is_active, activation_date, expiration_date FROM activation_keys")
     return jsonify([{
         "id": row[0],
         "key": row[1],
         "is_active": bool(row[2]),
-        "is_created": bool(row[3]),
-        "activation_date": row[4],
-        "expiration_date": row[5]
+        "activation_date": row[3],
+        "expiration_date": row[4]
     } for row in keys]), 200
 
 @app.route("/create", methods=["POST"])
@@ -65,16 +64,48 @@ def create_key():
 
     hashed_key = hash_key(key)
     try:
-        # Création de la clé avec is_active = 0 et is_created = 1
-        query_db("INSERT INTO activation_keys (key, is_active, is_created) VALUES (?, 0, 1)", (hashed_key,))
+        # On insère la clé en la marquant comme inactive (is_active = 0)
+        query_db("INSERT INTO activation_keys (key, is_active) VALUES (?, 0)", (hashed_key,))
         
-        # Vérification de l'état de la clé après la création
-        row = query_db("SELECT is_active, is_created FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
-        print(f"Clé {key} créée avec is_active = {row[0]}, is_created = {row[1]}")  # Log de l'état de la clé
+        # Log pour vérifier l'état de la clé
+        print(f"Clé {key} créée avec is_active = 0")  # Log pour confirmer que la clé est inactive
         
-        return jsonify({"message": "Key created successfully but is not usable until activation!"}), 201
+        return jsonify({"message": "Key created successfully!"}), 201
     except sqlite3.IntegrityError:
         return jsonify({"error": "Key already exists"}), 400
+
+
+@app.route("/check/<key>", methods=["GET"])
+def check_key(key):
+    hashed_key = hash_key(key)
+    row = query_db("SELECT is_active, expiration_date FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
+
+    if not row:
+        return jsonify({"error": "Invalid key"}), 404
+
+    is_active, expiration_date = row
+    
+    # Log pour vérifier si la clé est active ou inactive
+    print(f"Clé {key} - is_active: {is_active}, expiration_date: {expiration_date}")
+
+    # Si la clé n'est pas active, elle ne peut pas être utilisée
+    if not is_active:
+        return jsonify({"error": "Key is deactivated"}), 403
+
+    if expiration_date:
+        expiration_date = datetime.fromisoformat(expiration_date)
+        if datetime.utcnow() > expiration_date:
+            query_db("""
+                UPDATE activation_keys
+                SET is_active = 0, activation_date = NULL, expiration_date = NULL
+                WHERE key = ?
+            """, (hashed_key,))
+            return jsonify({"error": "Key expired"}), 403
+
+    return jsonify({
+        "is_active": bool(is_active),
+        "expires_at": expiration_date.isoformat() if expiration_date else None
+    }), 200
 
 
 @app.route("/activate", methods=["POST"])
@@ -87,14 +118,12 @@ def activate_key():
         return jsonify({"error": "Missing key or duration"}), 400
 
     hashed_key = hash_key(key)
-    row = query_db("SELECT is_active, is_created FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
+    row = query_db("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
 
     if not row:
         return jsonify({"error": "Invalid key"}), 404
     elif row[0] == 1:
         return jsonify({"error": "Key already activated"}), 400
-    elif row[1] == 1:
-        return jsonify({"error": "Key is created but not activated. Please activate the key first."}), 403
 
     now = datetime.utcnow()
     expiration = now
@@ -107,10 +136,9 @@ def activate_key():
     else:
         return jsonify({"error": "Invalid duration format"}), 400
 
-    # Activation de la clé et mise à jour de la date d'expiration
     query_db("""
         UPDATE activation_keys
-        SET is_active = 1, is_created = 0, activation_date = ?, expiration_date = ?
+        SET is_active = 1, activation_date = ?, expiration_date = ?
         WHERE key = ?
     """, (now, expiration, hashed_key))
 
@@ -139,46 +167,12 @@ def deactivate_key():
         WHERE key = ?
     """, (hashed_key,))
 
-    # Vérification de la désactivation de la clé
+    # Ajoutons un log pour confirmer que la clé est bien désactivée
     row = query_db("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
     if row[0] == 0:
         print(f"Clé {key} a été désactivée avec succès dans la base de données.")
-    
+
     return jsonify({"message": "Key deactivated successfully!"}), 200
-
-@app.route("/check/<key>", methods=["GET"])
-def check_key(key):
-    hashed_key = hash_key(key)
-    row = query_db("SELECT is_active, is_created, expiration_date FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
-
-    if not row:
-        return jsonify({"error": "Invalid key"}), 404
-
-    is_active, is_created, expiration_date = row
-
-    # Log pour vérifier si la clé est active ou inactive
-    print(f"Clé {key} - is_active: {is_active}, is_created: {is_created}, expiration_date: {expiration_date}")
-
-    # La clé ne peut pas être utilisée si elle n'est pas activée
-    if is_created == 1:
-        return jsonify({"error": "Key is created but not activated. Please activate the key first."}), 403
-    elif not is_active:
-        return jsonify({"error": "Key is deactivated"}), 403
-
-    if expiration_date:
-        expiration_date = datetime.fromisoformat(expiration_date)
-        if datetime.utcnow() > expiration_date:
-            query_db("""
-                UPDATE activation_keys
-                SET is_active = 0, activation_date = NULL, expiration_date = NULL
-                WHERE key = ?
-            """, (hashed_key,))
-            return jsonify({"error": "Key expired"}), 403
-
-    return jsonify({
-        "is_active": bool(is_active),
-        "expires_at": expiration_date.isoformat() if expiration_date else None
-    }), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
