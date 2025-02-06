@@ -64,9 +64,10 @@ def create_key():
 
     hashed_key = hash_key(key)
     try:
+        # Création de la clé avec is_active = 0 (inactif au départ)
         query_db("INSERT INTO activation_keys (key, is_active) VALUES (?, 0)", (hashed_key,))
-        
-        # Ajouter un log pour vérifier l'état de la clé après création
+
+        # Vérification de l'état de la clé après la création
         row = query_db("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
         print(f"Clé {key} créée avec is_active = {row[0]}")  # Log de l'état de la clé
         
@@ -103,6 +104,7 @@ def activate_key():
     else:
         return jsonify({"error": "Invalid duration format"}), 400
 
+    # Activation de la clé et mise à jour de la date d'expiration
     query_db("""
         UPDATE activation_keys
         SET is_active = 1, activation_date = ?, expiration_date = ?
@@ -134,11 +136,11 @@ def deactivate_key():
         WHERE key = ?
     """, (hashed_key,))
 
-    # Ajoutons un log pour confirmer que la clé est bien désactivée
+    # Vérification de la désactivation de la clé
     row = query_db("SELECT is_active FROM activation_keys WHERE key = ?", (hashed_key,), one=True)
     if row[0] == 0:
         print(f"Clé {key} a été désactivée avec succès dans la base de données.")
-
+    
     return jsonify({"message": "Key deactivated successfully!"}), 200
 
 @app.route("/check/<key>", methods=["GET"])
@@ -150,7 +152,7 @@ def check_key(key):
         return jsonify({"error": "Invalid key"}), 404
 
     is_active, expiration_date = row
-    
+
     # Log pour vérifier si la clé est active ou inactive
     print(f"Clé {key} - is_active: {is_active}, expiration_date: {expiration_date}")
 
@@ -173,6 +175,5 @@ def check_key(key):
         "expires_at": expiration_date.isoformat() if expiration_date else None
     }), 200
 
-    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
