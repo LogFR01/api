@@ -120,7 +120,7 @@ def deactivate_key():
         return jsonify({"error": "Invalid key"}), 404
     elif row[0] == 0:
         return jsonify({"error": "Key is already inactive"}), 400
-
+        
     query_db("""
         UPDATE activation_keys
         SET is_active = 0, activation_date = NULL, expiration_date = NULL
@@ -139,6 +139,7 @@ def check_key(key):
 
     is_active, expiration_date = row
     
+    # Vérification stricte : si la clé est désactivée, on l'empêche d'être utilisée
     if not is_active:
         return jsonify({"error": "Key is deactivated"}), 403
 
@@ -156,6 +157,6 @@ def check_key(key):
         "is_active": bool(is_active),
         "expires_at": expiration_date.isoformat() if expiration_date else None
     }), 200
-
+    
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
